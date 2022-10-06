@@ -1,7 +1,10 @@
 #include "jtaghal.h"
 #include "devmem.h"
+#include "debug.h"
 
 using namespace std;
+
+DEBUG_SET_LEVEL(DEBUG_LEVEL_ERR);
 
 #define BIT(x)                      ( 1 <<(x) )
 #define REG_AHB_DSP_JTAG_CTRL       ( 0x20900280 )
@@ -12,66 +15,82 @@ using namespace std;
 #define BIT_STDO                    ( BIT(1) )
 #define BIT_STRTCK                  ( BIT(0) )
 
+volatile uint32_t *jtagreg;
+
 void SetEnableMmioDJtag(bool en)
 {
     uint32_t reg;
 
-    reg = devmem_readl(REG_AHB_DSP_JTAG_CTRL);
+    reg = (*jtagreg);
     reg &= ~BIT_CEVA_SW_JTAG_ENA;
     reg |= (en ? BIT_CEVA_SW_JTAG_ENA : 0);
-    devmem_writel(REG_AHB_DSP_JTAG_CTRL, reg);
+    (*jtagreg) = reg;
 }
 
 void PulseTCK()
 {
     uint32_t reg;
 
-    reg = devmem_readl(REG_AHB_DSP_JTAG_CTRL);
+    reg = (*jtagreg);
     reg |= BIT_STCK;
-    devmem_writel(REG_AHB_DSP_JTAG_CTRL, reg);
-    while((devmem_readl(REG_AHB_DSP_JTAG_CTRL) & BIT_STRTCK) == 0);
+    (*jtagreg) = reg;
+    while(((*jtagreg) & BIT_STRTCK) == 0);
 
-    reg = devmem_readl(REG_AHB_DSP_JTAG_CTRL);
+    reg = (*jtagreg);
     reg &= ~BIT_STCK;
-    devmem_writel(REG_AHB_DSP_JTAG_CTRL, reg);
-    while(devmem_readl(REG_AHB_DSP_JTAG_CTRL) & BIT_STRTCK);
+    (*jtagreg) = reg;
+    while((*jtagreg) & BIT_STRTCK);
 }
 
 void SetTDI(bool tdi)
 {
     uint32_t reg;
 
-    reg = devmem_readl(REG_AHB_DSP_JTAG_CTRL);
+    reg = (*jtagreg);
     reg &= ~BIT_STDI;
     reg |= (tdi ? BIT_STDI : 0);
-    devmem_writel(REG_AHB_DSP_JTAG_CTRL, reg);
+    (*jtagreg) = reg;
 }
 
 void SetTMS(bool tms)
 {
     uint32_t reg;
 
-    reg = devmem_readl(REG_AHB_DSP_JTAG_CTRL);
+    reg = (*jtagreg);
     reg &= ~BIT_STMS;
     reg |= (tms ? BIT_STMS : 0);
-    devmem_writel(REG_AHB_DSP_JTAG_CTRL, reg);
+    (*jtagreg) = reg;
 }
 
 bool GetTDO()
 {
     uint32_t reg;
 
-    return (devmem_readl(REG_AHB_DSP_JTAG_CTRL) & BIT_STDO ? true : false);
+    return ((*jtagreg) & BIT_STDO ? true : false);
 }
 
 SprdMmioDJtagInterface::SprdMmioDJtagInterface()
 {
+	void *virt_addr;
+
+	virt_addr = devm_map(REG_AHB_DSP_JTAG_CTRL, 4);
+
+	if (virt_addr == NULL) {
+		ERR("addr map failed");
+		exit(0);
+	}
+    jtagreg = (uint32_t *)virt_addr;
+	
     SetEnableMmioDJtag(true);
 }
 
 SprdMmioDJtagInterface::~SprdMmioDJtagInterface()
 {
     SetEnableMmioDJtag(false);
+    if(jtagreg)
+    {
+        devm_unmap(jtagreg, 4);
+    }
 }
 
 string SprdMmioDJtagInterface::GetName()
