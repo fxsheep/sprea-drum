@@ -27,19 +27,24 @@ void SetEnableMmioDJtag(bool en)
     (*jtagreg) = reg;
 }
 
-void PulseTCK()
+void SetTCK(bool tck)
 {
     uint32_t reg;
 
-    reg = (*jtagreg);
-    reg |= BIT_STCK;
-    (*jtagreg) = reg;
-    while(((*jtagreg) & BIT_STRTCK) == 0);
-
-    reg = (*jtagreg);
-    reg &= ~BIT_STCK;
-    (*jtagreg) = reg;
-    while((*jtagreg) & BIT_STRTCK);
+    if(tck)
+    {
+        reg = (*jtagreg);
+        reg |= BIT_STCK;
+        (*jtagreg) = reg;
+        while(((*jtagreg) & BIT_STRTCK) == 0);
+    } 
+    else
+    {
+        reg = (*jtagreg);
+        reg &= ~BIT_STCK;
+        (*jtagreg) = reg;
+        while((*jtagreg) & BIT_STRTCK);
+    }
 }
 
 void SetTDI(bool tdi)
@@ -132,14 +137,18 @@ void SprdMmioDJtagInterface::ShiftData(bool last_tms, const unsigned char* send_
 
     for(i = 0; i < count; i++)
     {
+        if(i == count - 1)
+        {
+            SetTMS(last_tms);
+        }
         if(want_read)
         {
             PokeBit(rcv_data, i, GetTDO());
         }
-        PulseTCK();
         SetTDI(PeekBit(send_data, i));
+        SetTCK(true);
+        SetTCK(false);
     }
-    SetTMS(last_tms);
 }
 
 void SprdMmioDJtagInterface::SendDummyClocks(size_t n)
@@ -158,6 +167,7 @@ void SprdMmioDJtagInterface::ShiftTMS(bool tdi, const unsigned char* send_data, 
     for(i = 0; i < count; i++)
     {
         SetTMS(PeekBit(send_data, i));
-        PulseTCK();
+        SetTCK(true);
+        SetTCK(false);
     }
 }
